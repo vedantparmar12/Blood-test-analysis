@@ -101,4 +101,5 @@ More pain means more gain, always!",
     max_iter=1,
     max_rpm=1,
     allow_delegation=False
+
 )
