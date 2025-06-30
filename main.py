@@ -1,28 +1,62 @@
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+import uvicorn
+import asyncio
+import sys
 import os
 import uuid
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 import google.generativeai as genai
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
+from celery import Celery
+from sqlalchemy import create_engine, Column, String, Text, inspect
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
 
+# Load environment variables from .env file
 load_dotenv()
 
-# Configure Gemini directly
+# Configure Gemini directly using the API key from environment variables
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 model = genai.GenerativeModel('gemini-1.5-flash')
 
+# Initialize FastAPI app
 app = FastAPI(title="Blood Test Report Analyser")
+
+# Celery configuration
+celery = Celery(
+    "tasks",
+    broker=os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0"),
+    backend=os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+)
+
+# Database configuration
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./analysis_results.db")
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# Define the database model for storing analysis results
+class AnalysisResult(Base):
+    __tablename__ = "analysis_results"
+    id = Column(String, primary_key=True, index=True)
+    query = Column(String)
+    verification = Column(Text)
+    medical_analysis = Column(Text)
+    nutrition_plan = Column(Text)
+    exercise_plan = Column(Text)
+
+# Create the database table if it doesn't exist
+if not inspect(engine).has_table("analysis_results"):
+    Base.metadata.create_all(bind=engine)
+
 
 def read_pdf(file_path: str) -> str:
     """Read PDF content"""
-    try:
-        docs = PyPDFLoader(file_path=file_path).load()
-        content = ""
-        for doc in docs:
-            content += doc.page_content + "\n"
-        return content
-    except Exception as e:
-        return f"Error reading PDF: {e}"
+    docs = PyPDFLoader(file_path=file_path).load()
+    content = ""
+    for doc in docs:
+        content += doc.page_content + "\n"
+    return content
 
 def verify_document(content: str) -> str:
     """Verify if document is a blood test report"""
@@ -38,12 +72,8 @@ def verify_document(content: str) -> str:
     3. List of main blood markers/tests included
     4. Overall document quality assessment
     """
-    
-    try:
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"Verification failed: {e}"
+    response = model.generate_content(prompt)
+    return response.text
 
 def medical_analysis(content: str, query: str) -> str:
     """Medical doctor analysis"""
@@ -64,12 +94,8 @@ def medical_analysis(content: str, query: str) -> str:
     
     Be thorough but include appropriate medical disclaimers.
     """
-    
-    try:
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"Medical analysis failed: {e}"
+    response = model.generate_content(prompt)
+    return response.text
 
 def nutrition_analysis(content: str, query: str) -> str:
     """Clinical nutritionist analysis"""
@@ -92,12 +118,8 @@ def nutrition_analysis(content: str, query: str) -> str:
     
     Be specific and actionable.
     """
-    
-    try:
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"Nutrition analysis failed: {e}"
+    response = model.generate_content(prompt)
+    return response.text
 
 def exercise_analysis(content: str, query: str) -> str:
     """Exercise physiologist analysis"""
@@ -120,22 +142,42 @@ def exercise_analysis(content: str, query: str) -> str:
     
     Consider any contraindications from the blood work.
     """
-    
-    try:
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"Exercise analysis failed: {e}"
+    response = model.generate_content(prompt)
+    return response.text
 
-def analyze_blood_report(content: str, query: str) -> dict:
-    """Comprehensive analysis using multiple specialist perspectives"""
+@celery.task(bind=True)
+def analyze_blood_report_task(self, file_path: str, query: str):
+    """Celery task for comprehensive analysis that uses its own ID for the DB."""
+    pdf_content = read_pdf(file_path)
+    if "Error" in pdf_content:
+        # Handle error appropriately
+        return {"error": pdf_content}
     
-    return {
-        "verification": verify_document(content),
-        "medical_analysis": medical_analysis(content, query),
-        "nutrition_plan": nutrition_analysis(content, query),
-        "exercise_plan": exercise_analysis(content, query)
+    analysis = {
+        "verification": verify_document(pdf_content),
+        "medical_analysis": medical_analysis(pdf_content, query),
+        "nutrition_plan": nutrition_analysis(pdf_content, query),
+        "exercise_plan": exercise_analysis(pdf_content, query)
     }
+    
+    # Store result in database
+    db = SessionLocal()
+    # Use the Celery task's own ID as the primary key
+    db_result = AnalysisResult(
+        id=self.request.id,
+        query=query,
+        **analysis
+    )
+    db.add(db_result)
+    db.commit()
+    db.refresh(db_result)
+    db.close()
+    
+    # Clean up the file after processing
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        
+    return {"status": "success", "result_id": self.request.id}
 
 @app.get("/")
 async def root():
@@ -152,42 +194,41 @@ async def analyze_blood_report_endpoint(
     file_id = str(uuid.uuid4())
     file_path = f"data/blood_test_report_{file_id}.pdf"
     
-    try:
-        os.makedirs("data", exist_ok=True)
-        
-        with open(file_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
-        
-        # Read PDF content
-        pdf_content = read_pdf(file_path)
-        
-        if "Error" in pdf_content:
-            raise HTTPException(status_code=400, detail=pdf_content)
-        
-        # Comprehensive analysis with all specialists
-        analysis = analyze_blood_report(pdf_content, query)
-        
-        return {
-            "status": "success",
-            "query": query,
-            "analysis": analysis,
-            "file_processed": file.filename,
-            "specialists_consulted": [
-                "Document Verification Specialist",
-                "Medical Doctor", 
-                "Clinical Nutritionist",
-                "Exercise Physiologist"
-            ]
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except:
-                pass
+    os.makedirs("data", exist_ok=True)
+    
+    with open(file_path, "wb") as f:
+        content = await file.read()
+        f.write(content)
+    
+    task = analyze_blood_report_task.delay(file_path, query)
+    
+    return {
+        "status": "processing",
+        "task_id": task.id,
+        "message": "Your request is being processed. Use the task_id to check the status."
+    }
+
+@app.get("/results/{task_id}")
+async def get_analysis_result(task_id: str):
+    db = SessionLocal()
+    result = db.query(AnalysisResult).filter(AnalysisResult.id == task_id).first()
+    db.close()
+    if result is None:
+        raise HTTPException(status_code=404, detail="Result not found. The task may still be processing or it failed.")
+    return result
+
+async def main():
+    """Run the server with proper async handling"""
+    config = uvicorn.Config(
+        "__main__:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=False,
+        log_level="info"
+    )
+    server = uvicorn.Server(config)
+    await server.serve()
+
+if __name__ == "__main__":
+    if sys.platform == "win32" and sys.version_info >= (3, 8):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
