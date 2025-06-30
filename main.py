@@ -145,6 +145,7 @@ def exercise_analysis(content: str, query: str) -> str:
     response = model.generate_content(prompt)
     return response.text
 
+
 @celery.task(bind=True)
 def analyze_blood_report_task(self, file_path: str, query: str):
     """Celery task for comprehensive analysis that uses its own ID for the DB."""
@@ -158,6 +159,7 @@ def analyze_blood_report_task(self, file_path: str, query: str):
         "medical_analysis": medical_analysis(pdf_content, query),
         "nutrition_plan": nutrition_analysis(pdf_content, query),
         "exercise_plan": exercise_analysis(pdf_content, query)
+
     }
     
     # Store result in database
@@ -200,6 +202,7 @@ async def analyze_blood_report_endpoint(
         content = await file.read()
         f.write(content)
     
+
     task = analyze_blood_report_task.delay(file_path, query)
     
     return {
@@ -221,6 +224,7 @@ async def main():
     """Run the server with proper async handling"""
     config = uvicorn.Config(
         "__main__:app",
+
         host="0.0.0.0",
         port=8000,
         reload=False,
@@ -232,3 +236,4 @@ async def main():
 if __name__ == "__main__":
     if sys.platform == "win32" and sys.version_info >= (3, 8):
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
