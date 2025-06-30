@@ -1,216 +1,144 @@
-# Blood Test Report Analyzer 🩺
+# Blood Report Analysis System
 
-A comprehensive AI-powered system that analyzes blood test reports and provides personalized health insights, nutrition recommendations, and exercise plans using multiple specialized AI agents.
+A multi-agent AI system that analyzes blood test reports and provides comprehensive health insights using CrewAI and language models.
 
-## 🚀 What's New
+## Overview
 
-I recently refactored this project to fix several critical issues in the original implementation:
-- **Fixed Agent Configuration**: Properly configured CrewAI agents with appropriate LLM settings
-- **Improved Tool Integration**: Streamlined PDF reading tools with proper error handling
-- **Enhanced Code Structure**: Separated concerns and removed problematic code patterns
-- **Better Error Handling**: Added robust error handling for file operations and LLM interactions
-- **Professional Agent Personas**: Replaced unprofessional agent descriptions with expert-level backgrounds
+This application uses a team of specialized AI agents to analyze uploaded blood test reports (PDF format) and provide:
+- Medical assessment and interpretation
+- Nutritional recommendations
+- Exercise and lifestyle suggestions
 
-## 📋 Features
+## Features
 
-- **Multi-Agent Analysis**: Utilizes four specialized AI agents for comprehensive health analysis
-- **PDF Processing**: Automatically extracts and processes blood test reports from PDF files
-- **FastAPI Integration**: RESTful API endpoints for easy integration
-- **Comprehensive Health Insights**: 
-  - Document verification
-  - Medical analysis
-  - Nutrition recommendations
-  - Exercise planning
+- **PDF Upload Support**: Upload blood test reports in PDF format
+- **Multi-Agent Analysis**: Four specialized agents work together to provide comprehensive insights
+- **Streamlit Web Interface**: User-friendly interface for uploading and viewing results
+- **Flexible LLM Support**: Compatible with OpenAI GPT and Google Gemini models
 
-## 🛠️ Tech Stack
+## Architecture
 
-- **Framework**: FastAPI
-- **AI Orchestration**: CrewAI
-- **LLM**: Google Gemini 5.0 Flash
-- **PDF Processing**: LangChain PyPDFLoader
-- **Python**: 3.10+
+The system employs four specialized agents:
 
-## 📦 Installation
+1. **Verifier Agent**: Validates the uploaded document and extracts relevant blood test data
+2. **Doctor Agent**: Provides medical interpretation of test results
+3. **Nutritionist Agent**: Offers dietary recommendations based on the results
+4. **Exercise Specialist Agent**: Suggests fitness and lifestyle modifications
 
-### Using UV (Recommended)
+## Installation
 
-UV is a fast Python package installer and resolver written in Rust. It's significantly faster than pip.
-
+1. Clone the repository:
 ```bash
-# Install UV if you haven't already
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Clone the repository
-git clone https://github.com/yourusername/blood-test-analyzer.git
-cd blood-test-analyzer
-
-# Create virtual environment with UV
-uv venv
-
-# Activate virtual environment
-# On macOS/Linux:
-source .venv/bin/activate
-# On Windows:
-.venv\Scripts\activate
-
-# Install dependencies
-uv pip install -r requirements.txt
+git clone <repository-url>
+cd blood-report-analyzer
 ```
 
-### Using Traditional pip
-
+2. Install dependencies:
 ```bash
-# Create virtual environment
-python -m venv venv
-
-# Activate virtual environment
-# On macOS/Linux:
-source venv/bin/activate
-# On Windows:
-venv\Scripts\activate
-
-# Install dependencies
 pip install -r requirements.txt
 ```
 
-## 🔧 Configuration
-
-1. Create a `.env` file in the project root:
-
+3. Set up environment variables:
+Create a `.env` file in the root directory with your API key:
 ```env
-GOOGLE_API_KEY=your_gemini_api_key_here
+# For OpenAI
+OPENAI_API_KEY=your-api-key-here
+
+# OR for Google Gemini
+GOOGLE_API_KEY=your-api-key-here
 ```
 
-2. Ensure you have the following project structure:
+## Usage
 
-```
-blood-test-analyzer/
-├── agents.py          # Agent definitions
-├── task.py           # Task definitions
-├── tools.py          # Custom tools
-├── main.py           # FastAPI application
-├── requirements.txt  # Dependencies
-├── .env             # Environment variables
-├── data/            # Directory for uploaded files
-└── README.md        # This file
-```
-
-## 🚀 Running the Application
-
-### Using UV
-
+1. Start the Streamlit application:
 ```bash
-# Make sure virtual environment is activated
-uv run python main.py
+streamlit run main.py
 ```
 
-Or with uvicorn directly:
+2. Open your browser and navigate to `http://localhost:8501`
 
-```bash
-uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
+3. Upload a blood test report PDF using the file uploader
+
+4. Click "Process Report" to analyze the document
+
+5. View the comprehensive analysis from all four specialists
+
+## Project Structure
+
+```
+blood-report-analyzer/
+├── main.py              # Streamlit application entry point
+├── agents.py            # Agent definitions and configurations
+├── tasks.py             # Task definitions for each agent
+├── tools.py             # Custom tools (PDF reader)
+├── .env                 # Environment variables (not tracked)
+└── requirements.txt     # Python dependencies
 ```
 
-### Using Traditional Python
+## Key Components
 
-```bash
-python main.py
+### Agents (`agents.py`)
+Defines the four specialized agents with their roles, goals, and backstories.
+
+### Tasks (`tasks.py`)
+Specifies the specific tasks each agent performs during the analysis.
+
+### Tools (`tools.py`)
+Contains the PDF reading tool that extracts text from uploaded blood reports.
+
+### Main Application (`main.py`)
+Streamlit interface that orchestrates the entire workflow.
+
+## Recent Bug Fixes
+
+Several critical issues were resolved to ensure proper functionality:
+
+1. **Circular Reference Fix**: Resolved self-referential LLM initialization
+2. **Tool Implementation**: Converted async class-based tool to proper function-based tool with @tool decorator
+3. **Missing Imports**: Added required imports for PDF processing
+4. **Agent Orchestration**: Implemented proper crew workflow using all defined agents
+5. **File Path Handling**: Fixed file path passing to ensure agents can access uploaded PDFs
+
+## Configuration
+
+### Switching Language Models
+
+To use OpenAI GPT:
+```python
+from langchain_openai import ChatOpenAI
+llm = ChatOpenAI(model="gpt-4", temperature=0.7)
 ```
 
-The API will be available at `http://localhost:8000`
-
-## 📡 API Endpoints
-
-### Health Check
-```http
-GET /
+To use Google Gemini:
+```python
+from langchain_google_genai import ChatGoogleGenerativeAI
+llm = ChatGoogleGenerativeAI(
+    model="gemini-1.5-flash",
+    temperature=0.7,
+    google_api_key=os.getenv("GOOGLE_API_KEY")
+)
 ```
 
-### Analyze Blood Report
-```http
-POST /analyze
-Content-Type: multipart/form-data
+## Dependencies
 
-Parameters:
-- file: PDF file (required)
-- query: Analysis query (optional, default: "Summarise my Blood Test Report")
-```
+- `crewai`: Multi-agent orchestration framework
+- `streamlit`: Web application framework
+- `langchain`: LLM integration
+- `PyPDF2` or `pdfplumber`: PDF processing
+- Additional dependencies listed in `requirements.txt`
 
-Example using curl:
-```bash
-curl -X POST "http://localhost:8000/analyze" \
-  -F "file=@/path/to/blood_report.pdf" \
-  -F "query=What are my vitamin levels?"
-```
+## Contributing
 
-## 🤖 Agent Roles
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-1. **Document Verifier**: Validates that uploaded documents are blood test reports
-2. **Medical Doctor**: Provides comprehensive health analysis and medical insights
-3. **Clinical Nutritionist**: Creates personalized nutrition plans based on blood markers
-4. **Exercise Physiologist**: Designs safe exercise programs considering health status
+## License
 
-## 🔄 Workflow
+[Specify your license here]
 
-1. User uploads a blood test report (PDF)
-2. Document Verifier confirms it's a valid blood report
-3. Medical Doctor analyzes the results and identifies health concerns
-4. Nutritionist provides dietary recommendations
-5. Exercise Specialist creates a fitness plan
-6. All insights are compiled and returned to the user
+## Disclaimer
 
-## 🐛 Bug Fixes from Original Code
+This tool is for educational and informational purposes only. Always consult with qualified healthcare professionals for medical advice and interpretation of blood test results.
 
-The original implementation had several issues that have been resolved:
+## Support
 
-- **Removed Inappropriate Content**: Eliminated unprofessional agent descriptions and behaviors
-- **Fixed LLM Configuration**: Properly configured CrewAI LLM integration
-- **Corrected Tool Usage**: Fixed tool decorator syntax and async handling
-- **Improved Error Handling**: Added proper exception handling throughout
-- **Removed Hardcoded Paths**: Made file paths dynamic and configurable
-- **Fixed Memory Management**: Properly configured agent memory settings
-
-## 📝 Requirements
-
-Create a `requirements.txt` file:
-
-```txt
-fastapi==0.110.0
-uvicorn==0.27.0
-crewai==0.75.0
-langchain-community==0.2.5
-pypdf==4.0.0
-python-dotenv==1.0.0
-google-generativeai==0.3.0
-python-multipart==0.0.6
-```
-
-## 🧪 Testing
-
-You can test the API using the FastAPI automatic documentation:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-## 🚨 Important Notes
-
-- Ensure your Google API key has access to Gemini models
-- The application creates a temporary `data/` directory for processing files
-- Uploaded files are automatically cleaned up after processing
-- For production use, consider implementing authentication and rate limiting
-
-## 🤝 Contributing
-
-Feel free to submit issues and enhancement requests!
-
-## 📄 License
-
-This project is open source and available under the MIT License.
-
-## 🙏 Acknowledgments
-
-- CrewAI for the multi-agent framework
-- Google Gemini for LLM capabilities
-- FastAPI for the excellent web framework
-
----
-
-**Note**: This is a demonstration project for educational purposes. Always consult with qualified healthcare professionals for medical advice.
+For issues, questions, or suggestions, please open an issue on the GitHub repository.
